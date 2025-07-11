@@ -36,7 +36,7 @@ print("DEBUG: Environment variables checked.", flush=True)
 # For CoinGecko market data, we'll filter by market_cap_rank and 1-hour price change.
 MAX_MARKET_CAP_RANK = 50  # Only alert for tokens within the top 50 market cap rank
 MIN_PRICE_CHANGE_1H = 10.0 # Only alert if price change in last hour is >= 10%
-SLEEP_TIME = 120  # seconds (Increased to 2 minutes to avoid 429 errors)
+SLEEP_TIME = 300  # seconds (Increased to 5 minutes to avoid 429 errors)
 
 print(f"DEBUG: Configuration: MAX_MARKET_CAP_RANK={MAX_MARKET_CAP_RANK}, MIN_PRICE_CHANGE_1H={MIN_PRICE_CHANGE_1H}%, SLEEP_TIME={SLEEP_TIME} seconds.", flush=True)
 
@@ -183,3 +183,4 @@ except Exception as main_loop_e:
     print(f"❌ An UNEXPECTED ERROR occurred in the main loop: {type(main_loop_e).__name__}: {main_loop_e}", flush=True)
     traceback.print_exc()
     sys.exit(1) # Exit with an error code
+
