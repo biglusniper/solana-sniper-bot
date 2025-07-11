@@ -1,16 +1,16 @@
 import os
 import time
+import requests
 
-print("Step 1: Bot starting...")
+print("Starting bot...")
 
 DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL")
 BIRDEYE_API_KEY = os.getenv("BIRDEYE_API_KEY")
 
-print("Step 2: Environment variables loaded")
-print("DISCORD_WEBHOOK_URL:", DISCORD_WEBHOOK_URL)
-print("BIRDEYE_API_KEY:", BIRDEYE_API_KEY)
+print("DISCORD_WEBHOOK_URL:", "Loaded ✅" if DISCORD_WEBHOOK_URL else "❌ MISSING")
+print("BIRDEYE_API_KEY:", "Loaded ✅" if BIRDEYE_API_KEY else "❌ MISSING")
 
-print("Step 3: Sleeping 10 seconds...")
-time.sleep(10)
+if not DISCORD_WEBHOOK_URL or not BIRDEYE_API_KEY:
+    print("❌ Missing required environment variables.")
+    exit()
 
-print("Step 4: Finished test run.")
