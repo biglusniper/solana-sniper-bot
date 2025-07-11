@@ -70,10 +70,15 @@ def check_dexscreener():
     # Using Dexscreener's top boosted tokens endpoint as an example.
     # This endpoint generally does NOT require an API key.
     url = "https://api.dexscreener.com/latest/dex/token-boosts/top/v1"
-    headers = {} # No API key needed for this public Dexscreener endpoint
+    
+    # Adding a User-Agent header to make the request look more like a browser
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+    }
     
     print(f"DEBUG: Dexscreener API URL: {url}", flush=True)
     print("DEBUG: No API key required for this Dexscreener endpoint.", flush=True)
+    print("DEBUG: Using User-Agent header to mimic browser request.", flush=True)
 
     try:
         # Added a timeout to prevent requests from hanging indefinitely
@@ -173,7 +178,7 @@ try:
     while True:
         print("\n--- Starting new check cycle ---", flush=True) # Clearly mark cycles in logs
         check_dexscreener() # Changed to call the Dexscreener function
-        print(f"--- Check cycle finished. Sleeping for {SLEEP_TIME} seconds ---", flush=True)
+        print(f"--- Check cycle finished. Sleeping for {SLEEP_LIQUIDITY} seconds ---", flush=True)
         time.sleep(SLEEP_TIME) # Pause for the configured time
 except KeyboardInterrupt:
     print("\nScript terminated by user (KeyboardInterrupt). Exiting.", flush=True)
