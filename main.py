@@ -2,6 +2,8 @@ import requests
 import time
 import os
 
+print("Starting bot...")  # Add this line at the top
+
 DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL")
 BIRDEYE_API_KEY = os.getenv("BIRDEYE_API_KEY")
 
