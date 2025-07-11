@@ -4,7 +4,7 @@ import requests
 
 print("Step 1: Bot starting...")
 
-# Step 2: Load environment variables
+# Load environment variables
 DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL")
 BIRDEYE_API_KEY = os.getenv("BIRDEYE_API_KEY")
 
@@ -16,11 +16,10 @@ else:
     print("DISCORD_WEBHOOK_URL:", DISCORD_WEBHOOK_URL)
     print("BIRDEYE_API_KEY:", BIRDEYE_API_KEY)
 
-SLEEP_TIME = 60
+SLEEP_TIME = 60  # seconds
 MIN_VOLUME = 100
 MIN_HOLDERS = 2
 
-# Send alert to Discord
 def send_alert(token):
     message = {
         "content": f"New Token Detected\n"
@@ -32,23 +31,26 @@ def send_alert(token):
                    f"Link: https://birdeye.so/token/{token.get('address', '')}"
     }
     try:
-        r = requests.post(DISCORD_WEBHOOK_URL, json=message)
-        print("✅ Sent alert:", token.get('symbol'), "Status:", r.status_code)
+        res = requests.post(DISCORD_WEBHOOK_URL, json=message)
+        print("✅ Alert sent:", token.get('symbol'), "Status:", res.status_code)
     except Exception as e:
         print("❌ Webhook error:", e)
 
-# Call Birdeye API
 def check_birdeye():
-    print("Step 3: Checking Birdeye...")
-    url = "https://public-api.birdeye.so/public/token/solana/trending"
-    headers = {"X-API-KEY": BIRDEYE_API_KEY}
-    
+    print("Step 3: Checking Birdeye trending tokens...")
+
+    url = "https://public-api.birdeye.so/defi/trending"
+    headers = {
+        "X-API-KEY": BIRDEYE_API_KEY,
+        "x-chain": "solana"
+    }
+
     try:
         res = requests.get(url, headers=headers)
         print("Status Code:", res.status_code)
 
         if res.status_code != 200:
-            print("Birdeye API error:", res.text)
+            print("❌ Birdeye API error:", res.text)
             return
 
         data = res.json()
@@ -62,18 +64,17 @@ def check_birdeye():
             holders = token.get("holders", 0)
 
             if liq > MIN_VOLUME and vol > MIN_VOLUME and holders >= MIN_HOLDERS:
-                print(f"PASS: {token['symbol']} | LP: ${liq:,} | Holders: {holders}")
+                print(f"✅ PASS: {token['symbol']} | LP: ${liq:,} | Holders: {holders}")
                 send_alert(token)
             else:
-                print(f"SKIP: {token.get('symbol')} | LP: ${liq:,} | Holders: {holders}")
+                print(f"⏩ SKIP: {token.get('symbol')} | LP: ${liq:,} | Holders: {holders}")
 
     except Exception as e:
-        print("❌ Birdeye API call failed:", e)
+        print("❌ Birdeye fetch error:", e)
 
-# Main loop
 print("Sleeping 5 seconds before test run...")
 time.sleep(5)
-print("Starting test run...")
+print("Starting test run...\n")
 
 check_birdeye()
 
