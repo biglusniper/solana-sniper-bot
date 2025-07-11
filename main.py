@@ -2,6 +2,8 @@ import requests
 import time
 import os
 
+print("DEBUG: Script execution started.") # Debug print
+
 # Step 1: Load environment variables
 print("Step 1: Bot starting...")
 
@@ -17,9 +19,12 @@ if not BIRDEYE_API_KEY:
     exit()
 print("BIRDEYE_API_KEY loaded ✅")
 
+print("DEBUG: Environment variables checked.") # Debug print
+
 # Step 2: Config
 MIN_LIQUIDITY = 1000
 SLEEP_TIME = 60  # seconds
+print(f"DEBUG: Configuration: MIN_LIQUIDITY={MIN_LIQUIDITY}, SLEEP_TIME={SLEEP_TIME}") # Debug print
 
 def send_alert(token):
     message = {
@@ -33,11 +38,11 @@ def send_alert(token):
     try:
         response = requests.post(DISCORD_WEBHOOK_URL, json=message)
         if response.status_code != 204:
-            print("❌ Discord webhook error:", response.status_code, response.text)
+            print(f"❌ Discord webhook error: {response.status_code} - {response.text}")
         else:
             print(f"✅ Sent alert for {token.get('symbol', 'N/A')}")
     except Exception as e:
-        print("❌ Failed to send Discord alert:", e)
+        print(f"❌ Failed to send Discord alert: {e}")
 
 def check_birdeye():
     print("Step 3: Checking Birdeye trending tokens...") # Updated message
@@ -46,49 +51,49 @@ def check_birdeye():
     headers = {
         "X-API-KEY": BIRDEYE_API_KEY
     }
-
-    # You might want to add query parameters based on the documentation for
-    # sorting, limiting, or specifying a chain if the trending endpoint supports it.
-    # For example:
-    # params = {
-    #     "chain": "solana", # Verify if this parameter is needed for trending
-    #     "sort_by": "volume",
-    #     "sort_type": "desc",
-    #     "limit": 50
-    # }
+    print(f"DEBUG: Birdeye API URL: {url}") # Debug print
+    print(f"DEBUG: Birdeye API Headers (X-API-KEY truncated): X-API-KEY={BIRDEYE_API_KEY[:5]}...") # Debug print
 
     try:
-        # If you add params, change to: res = requests.get(url, headers=headers, params=params)
-        res = requests.get(url, headers=headers)
+        res = requests.get(url, headers=headers, timeout=10) # Added a timeout for safety
         print("Status Code:", res.status_code)
 
+        # Print raw response for debugging - KEEP THIS FOR NOW
+        print("Birdeye API Response (first 1000 chars):", str(res.text)[:1000])
+
         if res.status_code != 200:
-            print("❌ Birdeye API error:", res.status_code, res.text)
+            print(f"❌ Birdeye API error: {res.status_code} - {res.text}")
             return
 
-        # The structure of the response might be different for the trending endpoint.
-        # It's common for API responses to wrap data in a "data" key, but always verify.
         data = res.json()
         if not data.get("success"):
             print(f"❌ Birdeye API returned success: false. Message: {data.get('message', 'No message provided')}")
             return
 
-        tokens = data.get("data", []) # Assume the trending tokens are under 'data' key
+        # <<< IMPORTANT: Adjust 'data.get("data", [])' based on actual API response structure! >>>
+        tokens = data.get("data", [])
+        if not tokens: # Check if the 'data' key returned an empty list
+            print("❗ Birdeye API 'data' key is empty or not found.")
+            # If the tokens are at the root, try: tokens = data if isinstance(data, list) else []
+            # Or if they are under a different key, e.g., 'trending_items': tokens = data.get('trending_items', [])
+            return
+
         print(f"🔍 Found {len(tokens)} trending tokens...")
 
-        # You might need to adjust how you access token properties
-        # based on the response structure of the /defi/token_trending endpoint.
-        # For example, "liquidity" might be nested or named differently.
-        for token in tokens:
-            # Placeholder for potential renaming of keys if different in trending API
+        # Loop through tokens and process
+        for i, token in enumerate(tokens):
+            if i >= 20: # Limit to top 20 for initial testing
+                print("DEBUG: Reached limit of 20 tokens for processing.")
+                break
+
+            # Adjust these keys based on the actual Birdeye trending API response for each token object
             token_name = token.get('name', 'N/A')
             token_symbol = token.get('symbol', 'N/A')
             token_address = token.get('address', '')
             token_liquidity = token.get('liquidity', 0) # Adjust if key is different
+            print(f"DEBUG: Processing token: Symbol={token_symbol}, Liquidity={token_liquidity}")
 
             if token_liquidity > MIN_LIQUIDITY:
-                # You might need to reconstruct the 'token' dictionary
-                # if the trending endpoint returns fewer details or different keys
                 send_alert({
                     'name': token_name,
                     'symbol': token_symbol,
@@ -98,14 +103,30 @@ def check_birdeye():
             else:
                 print(f"⏩ Skipping {token_symbol} - liquidity ${token_liquidity:,.0f}")
 
+    except requests.exceptions.Timeout as e:
+        print(f"❌ Birdeye API request timed out: {e}")
+    except requests.exceptions.ConnectionError as e:
+        print(f"❌ Birdeye API connection error: {e}")
     except requests.exceptions.RequestException as req_err:
-        print(f"❌ Request error in Birdeye fetch: {req_err}")
+        print(f"❌ General Request error in Birdeye fetch: {req_err}")
     except ValueError as json_err:
-        print(f"❌ JSON decoding error from Birdeye response: {json_err}. Response text: {res.text if 'res' in locals() else 'No response'}")
+        # This catches errors if res.json() fails to parse the response
+        print(f"❌ JSON decoding error from Birdeye response: {json_err}. Full Response text: {res.text if 'res' in locals() else 'No response'}")
     except Exception as e:
-        print(f"❌ An unexpected error occurred in Birdeye fetch: {e}")
+        # Catch any other unexpected errors
+        print(f"❌ An UNEXPECTED ERROR occurred in check_birdeye: {type(e).__name__}: {e}")
+        import traceback
+        traceback.print_exc() # Print full traceback for unexpected errors
 
 # Main loop
-while True:
-    check_birdeye()
-    time.sleep(SLEEP_TIME)
+print("DEBUG: Entering main loop.") # Debug print
+try:
+    while True:
+        print("\n--- Starting new check cycle ---") # Clearly mark cycles
+        check_birdeye()
+        print(f"--- Check cycle finished. Sleeping for {SLEEP_TIME} seconds ---") # Debug print
+        time.sleep(SLEEP_TIME)
+except Exception as main_loop_e:
+    print(f"❌ An UNEXPECTED ERROR occurred in the main loop: {type(main_loop_e).__name__}: {main_loop_e}")
+    import traceback
+    traceback.print_exc()
