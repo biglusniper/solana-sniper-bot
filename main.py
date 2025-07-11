@@ -167,7 +167,7 @@ try:
         print("\n--- Starting new check cycle ---", flush=True) # Clearly mark cycles in logs
         check_birdeye()
         print(f"--- Check cycle finished. Sleeping for {SLEEP_TIME} seconds ---", flush=True)
-        time.sleep(SLEPT_TIME) # Pause for the configured time
+        time.sleep(SLEEP_TIME) # PAUSED FOR THE CONFIGURED TIME - Corrected typo here
 except KeyboardInterrupt:
     print("\nScript terminated by user (KeyboardInterrupt). Exiting.", flush=True)
     sys.exit(0)
