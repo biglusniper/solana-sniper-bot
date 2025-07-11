@@ -62,14 +62,15 @@ def send_alert(token):
 
 def check_dexscreener():
     """
-    Fetches trending/top tokens from Dexscreener API and sends alerts for new tokens
+    Fetches pairs from Dexscreener API and sends alerts for new tokens
     meeting the liquidity criteria.
     """
-    print("Step 3: Checking Dexscreener top boosted tokens...", flush=True)
+    print("Step 3: Checking Dexscreener pairs...", flush=True)
 
-    # Using Dexscreener's top boosted tokens endpoint as an example.
-    # This endpoint generally does NOT require an API key.
-    url = "https://api.dexscreener.com/latest/dex/token-boosts/top/v1"
+    # Using Dexscreener's /latest/dex/pairs endpoint.
+    # This endpoint allows filtering by chain and is more commonly used for data retrieval.
+    # We'll fetch pairs for Solana.
+    url = "https://api.dexscreener.com/latest/dex/pairs/solana" # Specify chain
     
     # Adding a User-Agent header to make the request look more like a browser
     headers = {
@@ -86,7 +87,6 @@ def check_dexscreener():
         print(f"Status Code: {res.status_code}", flush=True)
 
         # Print raw response for debugging JSON structure
-        # This is CRUCIAL for understanding the actual data format from Dexscreener
         print(f"Dexscreener API Response (first 1000 chars): {str(res.text)[:1000]}", flush=True)
         if len(res.text) > 1000:
             print("... (response truncated)", flush=True)
@@ -98,50 +98,37 @@ def check_dexscreener():
 
         data = res.json()
 
-        # Dexscreener's 'token-boosts' endpoint returns a list of token objects directly
-        # or sometimes under a key like 'tokens' or 'data'.
-        # We'll assume it's a list of tokens at the root or under 'tokens' key.
-        tokens = data.get('tokens', data) # Try 'tokens' key, fallback to root if it's a direct list
+        # Dexscreener /pairs endpoint usually returns a 'pairs' key containing a list of pair objects.
+        pairs = data.get('pairs', []) 
 
-        if not isinstance(tokens, list):
-            print(f"❌ Dexscreener API response did not return a list of tokens. Type received: {type(tokens).__name__}. Full data: {data}", flush=True)
+        if not isinstance(pairs, list):
+            print(f"❌ Dexscreener API response did not return a list of pairs. Type received: {type(pairs).__name__}. Full data: {data}", flush=True)
             return
         
-        if not tokens: # Check if the list of tokens is empty
-            print("❗ Dexscreener API returned an empty list of tokens. No tokens to process.", flush=True)
+        if not pairs: # Check if the list of pairs is empty
+            print("❗ Dexscreener API returned an empty list of pairs. No tokens to process.", flush=True)
             return
 
 
-        print(f"🔍 Found {len(tokens)} top boosted tokens from Dexscreener...", flush=True)
+        print(f"🔍 Found {len(pairs)} pairs from Dexscreener...", flush=True)
 
-        # Loop through tokens and process
-        # Limiting to top 20 for speed and to reduce Discord spam during testing
-        for i, token in enumerate(tokens):
-            if i >= 20:
-                print("DEBUG: Reached limit of 20 tokens for processing this cycle.", flush=True)
+        # Loop through pairs and extract token info.
+        # A pair typically has baseToken and quoteToken. We're interested in the baseToken.
+        for i, pair in enumerate(pairs):
+            if i >= 20: # Limit to top 20 pairs for processing
+                print("DEBUG: Reached limit of 20 pairs for processing this cycle.", flush=True)
                 break
 
-            # Adjust these keys based on the actual Dexscreener API response for each token object
-            # Common keys for boosted tokens might be 'tokenAddress', 'baseToken.symbol', 'baseToken.name', 'liquidity.usd'
-            # Let's try to extract common fields. You might need to refine these based on the actual response.
-            token_address = token.get('tokenAddress', '')
-            
-            # Dexscreener often nests token details, e.g., 'baseToken' object
-            # For simplicity, we'll try to get directly, but be prepared to adjust.
-            # If the token object itself has 'symbol' and 'name':
-            token_symbol = token.get('symbol', 'N/A')
-            token_name = token.get('name', 'N/A')
+            base_token_info = pair.get('baseToken', {})
+            token_name = base_token_info.get('name', 'N/A')
+            token_symbol = base_token_info.get('symbol', 'N/A')
+            token_address = base_token_info.get('address', '') # Base token's contract address
 
-            # Liquidity on Dexscreener is often nested or part of a pair, e.g., 'liquidity.usd'
-            # For 'token-boosts/top', it might be directly available or part of a 'pair' object.
-            # We'll try to get a 'liquidity' value directly or from a nested 'usd' key.
-            # You will need to inspect the actual response to get the correct path to liquidity.
-            token_liquidity = token.get('liquidity', 0)
-            if isinstance(token_liquidity, dict): # If liquidity is an object like {'usd': 1234.5}
-                token_liquidity = token_liquidity.get('usd', 0)
+            # Liquidity for the pair is usually directly under the pair object
+            liquidity_info = pair.get('liquidity', {})
+            token_liquidity = liquidity_info.get('usd', 0) # Get USD liquidity
 
-
-            print(f"DEBUG: Processing token {i+1}: Symbol='{token_symbol}', Name='{token_name}', Address='{token_address}', Liquidity=${token_liquidity:,.0f}", flush=True)
+            print(f"DEBUG: Processing pair {i+1}: Base Symbol='{token_symbol}', Name='{token_name}', Address='{token_address}', Liquidity=${token_liquidity:,.0f}", flush=True)
 
             if token_liquidity > MIN_LIQUIDITY:
                 send_alert({
@@ -178,7 +165,8 @@ try:
     while True:
         print("\n--- Starting new check cycle ---", flush=True) # Clearly mark cycles in logs
         check_dexscreener() # Changed to call the Dexscreener function
-        print(f"--- Check cycle finished. Sleeping for {SLEEP_LIQUIDITY} seconds ---", flush=True)
+        # Corrected typo from SLEEP_LIQUIDITY to SLEEP_TIME
+        print(f"--- Check cycle finished. Sleeping for {SLEEP_TIME} seconds ---", flush=True) 
         time.sleep(SLEEP_TIME) # Pause for the configured time
 except KeyboardInterrupt:
     print("\nScript terminated by user (KeyboardInterrupt). Exiting.", flush=True)
