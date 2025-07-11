@@ -2,22 +2,25 @@ import os
 import time
 import requests
 
-print("Starting bot...")
+print("Step 1: Bot starting...")
 
+# Step 2: Load environment variables
 DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL")
 BIRDEYE_API_KEY = os.getenv("BIRDEYE_API_KEY")
 
-print("DISCORD_WEBHOOK_URL:", "Loaded ✅" if DISCORD_WEBHOOK_URL else "❌ MISSING")
-print("BIRDEYE_API_KEY:", "Loaded ✅" if BIRDEYE_API_KEY else "❌ MISSING")
-
 if not DISCORD_WEBHOOK_URL or not BIRDEYE_API_KEY:
-    print("❌ Missing required environment variables.")
+    print("❌ Missing environment variables")
     exit()
+else:
+    print("Step 2: Environment variables loaded")
+    print("DISCORD_WEBHOOK_URL:", DISCORD_WEBHOOK_URL)
+    print("BIRDEYE_API_KEY:", BIRDEYE_API_KEY)
 
 SLEEP_TIME = 60
 MIN_VOLUME = 100
 MIN_HOLDERS = 2
 
+# Send alert to Discord
 def send_alert(token):
     message = {
         "content": f"New Token Detected\n"
@@ -29,53 +32,49 @@ def send_alert(token):
                    f"Link: https://birdeye.so/token/{token.get('address', '')}"
     }
     try:
-        response = requests.post(DISCORD_WEBHOOK_URL, json=message)
-        if response.status_code != 204:
-            print("Discord webhook error:", response.status_code, response.text)
-        else:
-            print(f"Sent alert for {token.get('symbol')}")
+        r = requests.post(DISCORD_WEBHOOK_URL, json=message)
+        print("✅ Sent alert:", token.get('symbol'), "Status:", r.status_code)
     except Exception as e:
-        print("Discord send error:", e)
+        print("❌ Webhook error:", e)
 
-# 🔁 Replace your old check_birdeye() with this new one:
+# Call Birdeye API
 def check_birdeye():
-    print("Checking Birdeye...")
-
+    print("Step 3: Checking Birdeye...")
+    url = "https://public-api.birdeye.so/public/token/solana/trending"
+    headers = {"X-API-KEY": BIRDEYE_API_KEY}
+    
     try:
-        url = "https://public-api.birdeye.so/public/token/solana/trending"
-        headers = {"X-API-KEY": BIRDEYE_API_KEY}
         res = requests.get(url, headers=headers)
-
-        print("Response status:", res.status_code)
-        print("Raw response text:", res.text[:300])
+        print("Status Code:", res.status_code)
 
         if res.status_code != 200:
-            print("Birdeye API error:", res.status_code)
+            print("Birdeye API error:", res.text)
             return
 
         data = res.json()
-        trending = data.get("data", [])
+        tokens = data.get("data", [])
 
-        print(f"Found {len(trending)} tokens")
+        print(f"Found {len(tokens)} tokens")
 
-        for token in trending:
-            try:
-                liq = token.get("liquidity", 0)
-                vol = token.get("volume", 0)
-                holders = token.get("holders", 0)
+        for token in tokens:
+            liq = token.get("liquidity", 0)
+            vol = token.get("volume", 0)
+            holders = token.get("holders", 0)
 
-                if liq > MIN_VOLUME and vol > MIN_VOLUME and holders >= MIN_HOLDERS:
-                    print(f"Passing: {token.get('symbol')} - ${liq:,} LP, {holders} holders")
-                    send_alert(token)
-                else:
-                    print(f"Skipped: {token.get('symbol')} - LP ${liq:,}, Holders {holders}")
-            except Exception as token_err:
-                print("Token loop error:", token_err)
+            if liq > MIN_VOLUME and vol > MIN_VOLUME and holders >= MIN_HOLDERS:
+                print(f"PASS: {token['symbol']} | LP: ${liq:,} | Holders: {holders}")
+                send_alert(token)
+            else:
+                print(f"SKIP: {token.get('symbol')} | LP: ${liq:,} | Holders: {holders}")
 
     except Exception as e:
-        print("Main API error:", e)
+        print("❌ Birdeye API call failed:", e)
 
-# 🔁 Main loop
-while True:
-    check_birdeye()
-    time.sleep(SLEEP_TIME)
+# Main loop
+print("Sleeping 5 seconds before test run...")
+time.sleep(5)
+print("Starting test run...")
+
+check_birdeye()
+
+print("✅ Test run finished.")
