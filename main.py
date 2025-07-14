@@ -20,39 +20,38 @@ if not DISCORD_WEBHOOK_URL:
     sys.exit(1) # Exit with an error code
 print("DISCORD_WEBHOOK_URL loaded ✅", flush=True)
 
-# BIRDEYE_API_KEY is no longer needed for CoinGecko, but keeping the check
-# just in case it's still in the environment and to avoid immediate exit if missing.
-# It will simply not be used in the API call.
-BIRDEYE_API_KEY = os.getenv("BIRDEYE_API_KEY")
-if not BIRDEYE_API_KEY:
-    print("❗ BIRDEYE_API_KEY is missing, but not strictly required for CoinGecko. Continuing...", flush=True)
-else:
-    print("BIRDEYE_API_KEY loaded ✅ (will not be used for CoinGecko API calls)", flush=True)
+# --- IMPORTANT: API Key directly embedded as requested ---
+# It is generally recommended to use environment variables for API keys for security.
+# Example: BIRDEYE_API_KEY = os.getenv("BIRDEYE_API_KEY")
+BIRDEYE_API_KEY = "264eb2443d724f85b4ec3f125bb7b8b1" # Your Birdeye API Key
+print("BIRDEYE_API_KEY loaded ✅ (directly from script)", flush=True)
 
 
 print("DEBUG: Environment variables checked.", flush=True)
 
 # Step 2: Config
-# Define the specific coins we are interested in by their CoinGecko IDs
-# Note: "degecoin" does not appear to be a valid CoinGecko ID.
-# Using "dogecoin" (DOGE) and "unicorn-fart-dust" (UFD) based on common IDs.
-TARGET_COIN_IDS = ["dogecoin", "unicorn-fart-dust"]
-MIN_PRICE_CHANGE_1H = 10.0 # Only alert if price change in last hour is >= 10%
-SLEEP_TIME = 300  # seconds (Increased to 5 minutes to avoid 429 errors)
+# Define the specific coins we are interested in by their name or symbol from Birdeye
+# IMPORTANT: Verify the exact 'name' and 'symbol' as they appear in Birdeye's API response
+# for "Degecoin" and "Unicorn Fart Dust" to ensure accurate filtering.
+TARGET_COINS = [
+    {"name_match": "Degecoin", "symbol_match": "DEGE"}, # Placeholder, confirm exact name/symbol on Birdeye
+    {"name_match": "Unicorn Fart Dust", "symbol_match": "UFD"}
+]
+MIN_LIQUIDITY = 1000 # Only alert for tokens with liquidity above this value
+SLEEP_TIME = 300  # seconds (Increased to 5 minutes to avoid rate limit issues)
 
-print(f"DEBUG: Configuration: Targeting specific coins: {TARGET_COIN_IDS}, MIN_PRICE_CHANGE_1H={MIN_PRICE_CHANGE_1H}%, SLEEP_TIME={SLEEP_TIME} seconds.", flush=True)
+print(f"DEBUG: Configuration: Targeting specific coins: {TARGET_COINS}, MIN_LIQUIDITY={MIN_LIQUIDITY}, SLEEP_TIME={SLEEP_TIME} seconds.", flush=True)
 
 def send_alert(token):
     """
     Sends a Discord alert for a detected token.
     """
-    # Adjusted message content to be more generic for specific coin alerts
+    # Adjusted message content to be more specific for targeted coin alerts
     message = {
-        "content": f"📈 Specific Coin Price Surge Alert! 📈\n"
+        "content": f"🎯 Targeted Coin Alert! 🎯\n"
                    f"Coin: {token.get('name', 'N/A')} ({token.get('symbol', 'N/A')})\n"
-                   f"Market Cap Rank: {token.get('market_cap_rank', 'N/A')}\n"
-                   f"1-Hour Price Change: {token.get('price_change_percentage_1h', 'N/A'):.2f}%\n"
-                   f"🔗 https://www.coingecko.com/en/coins/{token.get('id', '')}"
+                   f"Liquidity: ${token.get('liquidity', 0):,.0f}\n"
+                   f"🔗 https://birdeye.so/token/{token.get('address', '')}"
     }
 
     try:
@@ -65,118 +64,128 @@ def send_alert(token):
         print(f"❌ Failed to send Discord alert: {type(e).__name__}: {e}", flush=True)
         traceback.print_exc() # Print full traceback for debugging
 
-def check_coingecko():
+def check_birdeye():
     """
-    Fetches market data for coins from CoinGecko API and sends alerts for specific
-    target coins meeting the 1-hour price change criteria.
+    Fetches trending tokens from Birdeye API and sends alerts for specific
+    target coins meeting the liquidity criteria.
     """
-    print("Step 3: Checking CoinGecko market data for specific target coins with 1-hour change...", flush=True)
+    print("Step 3: Checking Birdeye trending tokens for specific targets...", flush=True)
 
-    # CoinGecko's /coins/markets endpoint for detailed market data, including price changes.
-    # We request data for USD, sort by market cap, and include 1-hour price change.
-    # per_page is set to 100 to ensure we get data for Dogecoin and Unicorn Fart Dust,
-    # even if they are not in the absolute top ranks at all times.
-    url = "https://api.coingecko.com/api/v3/coins/markets"
-    params = {
-        "vs_currency": "usd",
-        "order": "market_cap_desc", # Sort by market cap descending
-        "per_page": 100, # Fetch enough coins to find our targets
-        "page": 1,
-        "price_change_percentage": "1h", # Request 1-hour price change
-        "sparkline": "false" # Not needed for this bot
+    url = "https://public-api.birdeye.so/defi/token_trending"
+    headers = {
+        "X-API-KEY": BIRDEYE_API_KEY # Using the Birdeye API key
     }
-    headers = {} # No specific headers like User-Agent are typically required here.
-
-    print(f"DEBUG: CoinGecko API URL: {url} with params: {params}", flush=True)
-    print("DEBUG: No API key required for this CoinGecko endpoint (for basic usage).", flush=True)
+    print(f"DEBUG: Birdeye API URL: {url}", flush=True)
+    # Print a truncated API key for security, but confirm it's being used
+    print(f"DEBUG: Birdeye API Headers (X-API-KEY truncated): X-API-KEY={BIRDEYE_API_KEY[:5]}...", flush=True)
 
     try:
         # Added a timeout to prevent requests from hanging indefinitely
-        res = requests.get(url, headers=headers, params=params, timeout=15) # Pass params here
+        res = requests.get(url, headers=headers, timeout=15) # 15-second timeout
         print(f"Status Code: {res.status_code}", flush=True)
 
         # Print raw response for debugging JSON structure
-        print(f"CoinGecko API Response (first 1000 chars): {str(res.text)[:1000]}", flush=True)
+        print(f"Birdeye API Response (first 1000 chars): {str(res.text)[:1000]}", flush=True)
         if len(res.text) > 1000:
             print("... (response truncated)", flush=True)
 
 
         if res.status_code != 200:
-            print(f"❌ CoinGecko API error: Status Code {res.status_code}, Response: {res.text}", flush=True)
+            print(f"❌ Birdeye API error: Status Code {res.status_code}, Response: {res.text}", flush=True)
             return
 
-        coins_data = res.json()
+        data = res.json()
 
-        if not isinstance(coins_data, list):
-            print(f"❌ CoinGecko API response did not return a list of coins. Type received: {type(coins_data).__name__}. Full data: {data}", flush=True)
+        # Check the 'success' flag commonly present in API responses
+        if not data.get("success"):
+            print(f"❌ Birdeye API returned success: false. Message: {data.get('message', 'No message provided')}", flush=True)
             return
 
-        if not coins_data: # Check if the list of coins is empty
-            print("❗ CoinGecko API returned an empty list of coins. No tokens to process.", flush=True)
+        # --- IMPORTANT: Adjust 'data.get("data", [])' based on actual API response structure! ---
+        # Based on typical Birdeye responses, trending tokens are often under a 'data' key.
+        tokens = data.get("data", [])
+
+        if not isinstance(tokens, list):
+            print(f"❌ Birdeye API response did not return a list of tokens. Type received: {type(tokens).__name__}. Full data: {data}", flush=True)
+            return
+
+        if not tokens: # Check if the list of coins is empty
+            print("❗ Birdeye API returned an empty list of tokens. No tokens to process.", flush=True)
             return
 
 
-        print(f"🔍 Found {len(coins_data)} coins from CoinGecko market data. Filtering for targets...", flush=True)
+        print(f"🔍 Found {len(tokens)} trending tokens from Birdeye. Filtering for targets...", flush=True)
 
         found_and_alerted_target_coins = [] # To track which target coins met criteria
 
-        # Loop through the fetched coins and apply filtering criteria for target IDs
-        for coin in coins_data:
-            token_id = coin.get('id', '')
+        # Loop through the fetched tokens and apply filtering criteria for target names/symbols
+        for i, token in enumerate(tokens):
+            token_name = token.get('name', 'N/A')
+            token_symbol = token.get('symbol', 'N/A')
+            token_liquidity = token.get('liquidity', 0) # Adjust if key is different
+            token_address = token.get('address', '')
 
-            # Check if the current coin is one of our specific targets
-            if token_id in TARGET_COIN_IDS:
-                price_change_1h = coin.get('price_change_percentage_1h_in_currency')
-                token_name = coin.get('name', 'N/A')
-                token_symbol = coin.get('symbol', 'N/A')
-                market_cap_rank = coin.get('market_cap_rank') # Still useful for context in alert
+            is_target_coin = False
+            for target in TARGET_COINS:
+                # Case-insensitive comparison for name and symbol
+                if (target["name_match"].lower() == token_name.lower() or
+                    target["symbol_match"].lower() == token_symbol.lower()):
+                    is_target_coin = True
+                    break
 
-                print(f"DEBUG: Found target coin: Symbol='{token_symbol}', Rank={market_cap_rank}, 1h Change={price_change_1h:.2f}%" if price_change_1h is not None else f"DEBUG: Found target coin: Symbol='{token_symbol}', Rank={market_cap_rank}, 1h Change=N/A (data missing)", flush=True)
+            if is_target_coin:
+                print(f"DEBUG: Found target coin: Symbol='{token_symbol}', Name='{token_name}', Liquidity=${token_liquidity:,.0f}", flush=True)
 
-                # Filter: must have a significant 1-hour price increase
-                if price_change_1h is not None and price_change_1h >= MIN_PRICE_CHANGE_1H:
+                if token_liquidity > MIN_LIQUIDITY:
                     send_alert({
-                        'id': token_id,
                         'name': token_name,
                         'symbol': token_symbol,
-                        'market_cap_rank': market_cap_rank,
-                        'price_change_percentage_1h': price_change_1h
+                        'address': token_address,
+                        'liquidity': token_liquidity
                     })
-                    found_and_alerted_target_coins.append(token_id)
+                    found_and_alerted_target_coins.append(token_name) # Use name for tracking
                 else:
-                    print(f"⏩ Skipping {token_symbol} - 1h change {price_change_1h:.2f}% is below minimum {MIN_PRICE_CHANGE_1H}% (or data missing).", flush=True)
+                    print(f"⏩ Skipping {token_symbol} - liquidity ${token_liquidity:,.0f} is below minimum ${MIN_LIQUIDITY:,.0f}.", flush=True)
             else:
                 # If it's not a target coin, just print debug info if needed, or skip
-                # print(f"DEBUG: Skipping non-target coin: {token_id}", flush=True)
+                # print(f"DEBUG: Skipping non-target coin: {token_symbol}", flush=True)
                 pass # Do nothing for non-target coins
 
         # Check if all target coins were found in the fetched data
-        for target_id in TARGET_COIN_IDS:
-            if target_id not in [c.get('id') for c in coins_data]:
-                print(f"INFO: Target coin '{target_id}' was not found in the fetched CoinGecko data (might be outside top 100 or delisted).", flush=True)
+        # This check might be less useful for "trending" endpoint as it's not guaranteed to have all coins
+        # but can help debug if a target name/symbol is wrong.
+        for target in TARGET_COINS:
+            target_found_in_response = False
+            for token in tokens:
+                if (target["name_match"].lower() == token.get('name', '').lower() or
+                    target["symbol_match"].lower() == token.get('symbol', '').lower()):
+                    target_found_in_response = True
+                    break
+            if not target_found_in_response:
+                print(f"INFO: Target coin '{target['name_match']}' (or symbol '{target['symbol_match']}') was not found in the fetched Birdeye trending data.", flush=True)
 
 
         if not found_and_alerted_target_coins:
-            print("INFO: No target coins met the 1-hour price change criteria in this cycle.", flush=True)
+            print("INFO: No target coins met the liquidity criteria in this cycle.", flush=True)
 
 
     except requests.exceptions.Timeout as e:
-        print(f"❌ CoinGecko API request timed out after {res.request.timeout} seconds: {e}", flush=True)
+        print(f"❌ Birdeye API request timed out after {res.request.timeout} seconds: {e}", flush=True)
         traceback.print_exc()
     except requests.exceptions.ConnectionError as e:
-        print(f"❌ CoinGecko API connection error (e.g., DNS failure, refused connection): {e}", flush=True)
+        print(f"❌ Birdeye API connection error (e.g., DNS failure, refused connection): {e}", flush=True)
         traceback.print_exc()
     except requests.exceptions.RequestException as req_err:
         # Catches any other requests-related errors (e.g., HTTPError for 4xx/5xx responses)
-        print(f"❌ General Request error in CoinGecko fetch: {type(req_err).__name__}: {req_err}", flush=True)
+        print(f"❌ General Request error in Birdeye fetch: {type(req_err).__name__}: {req_err}", flush=True)
         traceback.print_exc()
     except ValueError as json_err:
         # This catches errors if res.json() fails to parse the response (e.g., not valid JSON)
-        print(f"❌ JSON decoding error from CoinGecko response: {json_err}. Full Response text: {res.text if 'res' in locals() else 'No response received'}", flush=True)
+        print(f"❌ JSON decoding error from Birdeye response: {json_err}. Full Response text: {res.text if 'res' in locals() else 'No response received'}", flush=True)
         traceback.print_exc()
     except Exception as e:
         # Catch any other unexpected errors that were not specifically handled above
-        print(f"❌ An UNEXPECTED ERROR occurred in check_coingecko: {type(e).__name__}: {e}", flush=True)
+        print(f"❌ An UNEXPECTED ERROR occurred in check_birdeye: {type(e).__name__}: {e}", flush=True)
         traceback.print_exc() # Print full traceback for unexpected errors
 
 # Main loop
@@ -184,14 +193,14 @@ print("DEBUG: Entering main loop.", flush=True)
 try:
     while True:
         print("\n--- Starting new check cycle ---", flush=True) # Clearly mark cycles in logs
-        check_coingecko() # Changed to call the CoinGecko function
+        check_birdeye() # Changed to call the Birdeye function
         print(f"--- Check cycle finished. Sleeping for {SLEEP_TIME} seconds ---", flush=True)
         time.sleep(SLEEP_TIME) # Pause for the configured time
 except KeyboardInterrupt:
     print("\nScript terminated by user (KeyboardInterrupt). Exiting.", flush=True)
     sys.exit(0)
 except Exception as main_loop_e:
-    # This catches any errors that escape the check_coingecko function or occur in the loop itself
+    # This catches any errors that escape the check_birdeye function or occur in the loop itself
     print(f"❌ An UNEXPECTED ERROR occurred in the main loop: {type(main_loop_e).__name__}: {main_loop_e}", flush=True)
     traceback.print_exc()
     sys.exit(1) # Exit with an error code
