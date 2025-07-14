@@ -33,25 +33,26 @@ else:
 print("DEBUG: Environment variables checked.", flush=True)
 
 # Step 2: Config
-# For CoinGecko market data, we'll filter by market_cap_rank and 1-hour price change.
-MAX_MARKET_CAP_RANK = 50  # Only alert for tokens within the top 50 market cap rank
+# Define the specific coins we are interested in by their CoinGecko IDs
+# Note: "degecoin" does not appear to be a valid CoinGecko ID.
+# Using "dogecoin" (DOGE) and "unicorn-fart-dust" (UFD) based on common IDs.
+TARGET_COIN_IDS = ["dogecoin", "unicorn-fart-dust"]
 MIN_PRICE_CHANGE_1H = 10.0 # Only alert if price change in last hour is >= 10%
 SLEEP_TIME = 300  # seconds (Increased to 5 minutes to avoid 429 errors)
 
-print(f"DEBUG: Configuration: MAX_MARKET_CAP_RANK={MAX_MARKET_CAP_RANK}, MIN_PRICE_CHANGE_1H={MIN_PRICE_CHANGE_1H}%, SLEEP_TIME={SLEEP_TIME} seconds.", flush=True)
+print(f"DEBUG: Configuration: Targeting specific coins: {TARGET_COIN_IDS}, MIN_PRICE_CHANGE_1H={MIN_PRICE_CHANGE_1H}%, SLEEP_TIME={SLEEP_TIME} seconds.", flush=True)
 
 def send_alert(token):
     """
     Sends a Discord alert for a detected token.
     """
-    # Adjusted message content to include 1-hour price change
+    # Adjusted message content to be more generic for specific coin alerts
     message = {
-        "content": f"🚀 Trending Token Alert! 🚀\n"
-                   f"Name: {token.get('name', 'N/A')}\n"
-                   f"Symbol: {token.get('symbol', 'N/A')}\n"
+        "content": f"📈 Specific Coin Price Surge Alert! 📈\n"
+                   f"Coin: {token.get('name', 'N/A')} ({token.get('symbol', 'N/A')})\n"
                    f"Market Cap Rank: {token.get('market_cap_rank', 'N/A')}\n"
                    f"1-Hour Price Change: {token.get('price_change_percentage_1h', 'N/A'):.2f}%\n"
-                   f"🔗 https://www.coingecko.com/en/coins/{token.get('id', '')}" 
+                   f"🔗 https://www.coingecko.com/en/coins/{token.get('id', '')}"
     }
 
     try:
@@ -66,24 +67,26 @@ def send_alert(token):
 
 def check_coingecko():
     """
-    Fetches market data for coins from CoinGecko API and sends alerts for coins
-    meeting the market cap rank and 1-hour price change criteria.
+    Fetches market data for coins from CoinGecko API and sends alerts for specific
+    target coins meeting the 1-hour price change criteria.
     """
-    print("Step 3: Checking CoinGecko market data for top coins with 1-hour change...", flush=True)
+    print("Step 3: Checking CoinGecko market data for specific target coins with 1-hour change...", flush=True)
 
     # CoinGecko's /coins/markets endpoint for detailed market data, including price changes.
     # We request data for USD, sort by market cap, and include 1-hour price change.
+    # per_page is set to 100 to ensure we get data for Dogecoin and Unicorn Fart Dust,
+    # even if they are not in the absolute top ranks at all times.
     url = "https://api.coingecko.com/api/v3/coins/markets"
     params = {
         "vs_currency": "usd",
         "order": "market_cap_desc", # Sort by market cap descending
-        "per_page": 100, # Fetch enough coins to cover top 50, plus some buffer
+        "per_page": 100, # Fetch enough coins to find our targets
         "page": 1,
         "price_change_percentage": "1h", # Request 1-hour price change
         "sparkline": "false" # Not needed for this bot
     }
     headers = {} # No specific headers like User-Agent are typically required here.
-    
+
     print(f"DEBUG: CoinGecko API URL: {url} with params: {params}", flush=True)
     print("DEBUG: No API key required for this CoinGecko endpoint (for basic usage).", flush=True)
 
@@ -107,45 +110,54 @@ def check_coingecko():
         if not isinstance(coins_data, list):
             print(f"❌ CoinGecko API response did not return a list of coins. Type received: {type(coins_data).__name__}. Full data: {data}", flush=True)
             return
-        
+
         if not coins_data: # Check if the list of coins is empty
             print("❗ CoinGecko API returned an empty list of coins. No tokens to process.", flush=True)
             return
 
 
-        print(f"🔍 Found {len(coins_data)} coins from CoinGecko market data...", flush=True)
+        print(f"🔍 Found {len(coins_data)} coins from CoinGecko market data. Filtering for targets...", flush=True)
 
-        # Loop through the coins and apply filtering criteria
-        processed_count = 0
+        found_and_alerted_target_coins = [] # To track which target coins met criteria
+
+        # Loop through the fetched coins and apply filtering criteria for target IDs
         for coin in coins_data:
-            # We already sorted by market_cap_desc and fetched enough, so just check rank
-            market_cap_rank = coin.get('market_cap_rank') 
-            price_change_1h = coin.get('price_change_percentage_1h_in_currency')
-
             token_id = coin.get('id', '')
-            token_name = coin.get('name', 'N/A')
-            token_symbol = coin.get('symbol', 'N/A')
-            
-            print(f"DEBUG: Processing coin: Symbol='{token_symbol}', Rank={market_cap_rank}, 1h Change={price_change_1h:.2f}%" if price_change_1h is not None else f"DEBUG: Processing coin: Symbol='{token_symbol}', Rank={market_cap_rank}, 1h Change=N/A", flush=True)
 
-            # Filter: must be within MAX_MARKET_CAP_RANK AND have a significant 1-hour price increase
-            if (market_cap_rank is not None and market_cap_rank <= MAX_MARKET_CAP_RANK and
-                price_change_1h is not None and price_change_1h >= MIN_PRICE_CHANGE_1H):
-                
-                send_alert({
-                    'id': token_id, 
-                    'name': token_name,
-                    'symbol': token_symbol,
-                    'market_cap_rank': market_cap_rank, 
-                    'price_change_percentage_1h': price_change_1h # Pass 1h change for alert
-                })
-                processed_count += 1
+            # Check if the current coin is one of our specific targets
+            if token_id in TARGET_COIN_IDS:
+                price_change_1h = coin.get('price_change_percentage_1h_in_currency')
+                token_name = coin.get('name', 'N/A')
+                token_symbol = coin.get('symbol', 'N/A')
+                market_cap_rank = coin.get('market_cap_rank') # Still useful for context in alert
+
+                print(f"DEBUG: Found target coin: Symbol='{token_symbol}', Rank={market_cap_rank}, 1h Change={price_change_1h:.2f}%" if price_change_1h is not None else f"DEBUG: Found target coin: Symbol='{token_symbol}', Rank={market_cap_rank}, 1h Change=N/A (data missing)", flush=True)
+
+                # Filter: must have a significant 1-hour price increase
+                if price_change_1h is not None and price_change_1h >= MIN_PRICE_CHANGE_1H:
+                    send_alert({
+                        'id': token_id,
+                        'name': token_name,
+                        'symbol': token_symbol,
+                        'market_cap_rank': market_cap_rank,
+                        'price_change_percentage_1h': price_change_1h
+                    })
+                    found_and_alerted_target_coins.append(token_id)
+                else:
+                    print(f"⏩ Skipping {token_symbol} - 1h change {price_change_1h:.2f}% is below minimum {MIN_PRICE_CHANGE_1H}% (or data missing).", flush=True)
             else:
-                print(f"⏩ Skipping {token_symbol} - Does not meet rank (<= {MAX_MARKET_CAP_RANK}) or 1h change (>= {MIN_PRICE_CHANGE_1H}%) criteria.", flush=True)
+                # If it's not a target coin, just print debug info if needed, or skip
+                # print(f"DEBUG: Skipping non-target coin: {token_id}", flush=True)
+                pass # Do nothing for non-target coins
 
-            if processed_count >= 20: # Limit alerts to 20 per cycle to prevent spam
-                print("DEBUG: Reached limit of 20 alerts for this cycle.", flush=True)
-                break
+        # Check if all target coins were found in the fetched data
+        for target_id in TARGET_COIN_IDS:
+            if target_id not in [c.get('id') for c in coins_data]:
+                print(f"INFO: Target coin '{target_id}' was not found in the fetched CoinGecko data (might be outside top 100 or delisted).", flush=True)
+
+
+        if not found_and_alerted_target_coins:
+            print("INFO: No target coins met the 1-hour price change criteria in this cycle.", flush=True)
 
 
     except requests.exceptions.Timeout as e:
@@ -173,7 +185,7 @@ try:
     while True:
         print("\n--- Starting new check cycle ---", flush=True) # Clearly mark cycles in logs
         check_coingecko() # Changed to call the CoinGecko function
-        print(f"--- Check cycle finished. Sleeping for {SLEEP_TIME} seconds ---", flush=True) 
+        print(f"--- Check cycle finished. Sleeping for {SLEEP_TIME} seconds ---", flush=True)
         time.sleep(SLEEP_TIME) # Pause for the configured time
 except KeyboardInterrupt:
     print("\nScript terminated by user (KeyboardInterrupt). Exiting.", flush=True)
@@ -183,4 +195,3 @@ except Exception as main_loop_e:
     print(f"❌ An UNEXPECTED ERROR occurred in the main loop: {type(main_loop_e).__name__}: {main_loop_e}", flush=True)
     traceback.print_exc()
     sys.exit(1) # Exit with an error code
-
